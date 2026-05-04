@@ -1938,7 +1938,7 @@ static void add_symlink(struct directory_stack *stack, char *name)
 
 static int follow_symlink(char *path, int symlinks, struct directory_stack *stack)
 {
-	char *name = stack_name(stack);
+	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
 	int depth = stack_depth(stack);
@@ -2100,7 +2100,7 @@ static void add_to_stack_extracts(struct directory_stack *stack)
  */
 static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 {
-	char *name = stack_name(stack);
+	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
 	int depth = stack_depth(stack);
