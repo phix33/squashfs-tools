@@ -1760,29 +1760,20 @@ static struct directory_stack *create_stack()
 }
 
 
-static struct directory_stack *add_stack(struct directory_stack *stack, unsigned int start_block,
-	unsigned int offset, char *name, int type, int depth)
+static struct directory_stack *push_stack(struct directory_stack *stack, unsigned int start_block,
+	unsigned int offset, char *name, int type)
 {
-	if((depth - 1) == stack->size) {
-		/* Stack growing an extra level */
-		stack->stack = REALLOC(stack->stack, depth *
-					sizeof(struct directory_level));
+	int depth = ++ stack->size;
 
-		stack->stack[depth - 1].start_block = start_block;
-		stack->stack[depth - 1].offset = offset;
-		stack->stack[depth - 1].type = type;
-		stack->stack[depth - 1].name = STRDUP(name);
-	} else if((depth + 1) == stack->size)
-			/* Stack shrinking a level */
-			free(stack->stack[depth].name);
-	else if(depth == stack->size)
-		/* Stack staying same size - nothing to do */
-		return stack;
-	else
-		/* Any other change in size is invalid */
-		EXIT_UNSQUASH("Invalid state in add_stack\n");
+	/* Stack growing an extra level */
+	stack->stack = REALLOC(stack->stack, depth *
+				sizeof(struct directory_level));
 
-	stack->size = depth;
+	stack->stack[depth - 1].start_block = start_block;
+	stack->stack[depth - 1].offset = offset;
+	stack->stack[depth - 1].type = type;
+	stack->stack[depth - 1].name = STRDUP(name);
+
 	return stack;
 }
 
@@ -2032,17 +2023,17 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 				/* if at end of path, traversed OK */
 				if(path[0] == '\0') {
 					traversed = TRUE;
-					add_stack(stack, entry_start, entry_offset, name, type, depth + 1);
+					push_stack(stack, entry_start, entry_offset, name, type);
 				} else /* follow the path */
 					traversed = follow_symlink(path, symlinks,
-						add_stack(stack, entry_start, entry_offset, name, type, depth + 1));
+						push_stack(stack, entry_start, entry_offset, name, type));
 				break;
 			default:
 				/* leaf directory entry, can't go any further,
 				 * and so path must not continue */
 				if(path[0] == '\0') {
 					traversed = TRUE;
-					add_stack(stack, entry_start, entry_offset, name, type, depth + 1);
+					push_stack(stack, entry_start, entry_offset, name, type);
 				} else
 					traversed = FALSE;
 			}
@@ -2200,7 +2191,7 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 					traversed = TRUE;
 				} else /* follow the path */
 					traversed = follow_path(path, symlinks,
-						add_stack(stack, entry_start, entry_offset, name, type, depth + 1));
+						push_stack(stack, entry_start, entry_offset, name, type));
 				break;
 			default:
 				/* leaf directory entry, can't go any further,
@@ -3335,10 +3326,10 @@ static void resolve_symlinks(int argc, char *argv[])
 		 */
 		stack = create_stack();
 
-		found = follow_path(argv[n], 0, add_stack(stack,
+		found = follow_path(argv[n], 0, push_stack(stack,
 			SQUASHFS_INODE_BLK(sBlk.s.root_inode),
 			SQUASHFS_INODE_OFFSET(sBlk.s.root_inode),
-			"", SQUASHFS_DIR_TYPE, 1));
+			"", SQUASHFS_DIR_TYPE));
 
 		if(!found) {
 			if(missing_symlinks)
@@ -3484,7 +3475,7 @@ static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
 
 				/* follow the path */
 				res = cat_scan(path, new_pathname(newpath, name),
-					 add_stack(stack, entry_start, entry_offset, name, type, depth + 1));
+					 push_stack(stack, entry_start, entry_offset, name, type));
 				if(res == FALSE)
 					traversed = FALSE;
 				pop_stack(stack);
@@ -3618,10 +3609,10 @@ static int cat_path(int argc, char *argv[])
 	for(n = 0; n < argc; n++) {
 		stack = create_stack();
 
-		res = cat_scan(argv[n], new_pathname("/", ""), add_stack(stack,
+		res = cat_scan(argv[n], new_pathname("/", ""), push_stack(stack,
 			SQUASHFS_INODE_BLK(sBlk.s.root_inode),
 			SQUASHFS_INODE_OFFSET(sBlk.s.root_inode),
-			"", SQUASHFS_DIR_TYPE, 1));
+			"", SQUASHFS_DIR_TYPE));
 
 		if(res == FALSE)
 			failed = TRUE;
