@@ -3392,20 +3392,22 @@ static char *add_pathname(char *path, char *name)
 }
 
 
-static int cat_scan(char *path, char *curpath, char *name, unsigned int start_block,
-	unsigned int offset, int depth, struct directory_stack *stack)
+
+static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
 {
+	char *name;
+	unsigned int start_block = stack_start_block(stack);
+	unsigned int offset = stack_offset(stack);
+	int depth = stack_depth(stack);
 	struct inode *i;
 	struct dir *dir;
-	char *target, *newpath, *addpath, *symlink;
+	char *target, *addpath, *symlink;
 	unsigned int type;
 	int matched = FALSE, traversed = TRUE;
 	int match, res;
 	unsigned int entry_start, entry_offset;
 	regex_t preg;
 	struct directory_stack *new;
-
-	newpath = new_pathname(curpath, name);
 
 	while((path = get_component(path, &target))) {
 		if(strcmp(target, ".") != 0)
@@ -3421,18 +3423,11 @@ static int cat_scan(char *path, char *curpath, char *name, unsigned int start_bl
 		return FALSE;
 	}
 
-	add_stack(stack, start_block, offset, name, SQUASHFS_DIR_TYPE, depth);
-
 	if(strcmp(target, "..") == 0) {
 		if(depth > 1) {
 			free(target);
-			start_block = stack->stack[depth - 2].start_block;
-			offset = stack->stack[depth - 2].offset;
-
 			new = clone_stack(stack);
-			res = cat_scan(path, newpath, "..", start_block, offset,
-					depth - 1, new);
-
+			res = cat_scan(path, new_pathname(newpath, ".."), set_stack(new, depth - 1));
 			free_stack(new);
 			return res;
 		} else {
@@ -3488,8 +3483,8 @@ static int cat_scan(char *path, char *curpath, char *name, unsigned int start_bl
 				}
 
 				/* follow the path */
-				res = cat_scan(path, newpath, name, entry_start, entry_offset,
-								depth + 1, stack);
+				res = cat_scan(path, new_pathname(newpath, name),
+					 add_stack(stack, entry_start, entry_offset, name, type, depth + 1));
 				if(res == FALSE)
 					traversed = FALSE;
 				pop_stack(stack);
@@ -3561,9 +3556,7 @@ static int cat_scan(char *path, char *curpath, char *name, unsigned int start_bl
 					}
 
 					/* continue following path */
-					res = cat_scan(path, newpath, stack_name(new),
-						stack_start_block(new), stack_offset(new),
-						stack_depth(new), new);
+					res = cat_scan(path, new_pathname(newpath, name), new);
 					if(res == FALSE)
 						traversed = FALSE;
 					free_stack(new);
@@ -3625,10 +3618,10 @@ static int cat_path(int argc, char *argv[])
 	for(n = 0; n < argc; n++) {
 		stack = create_stack();
 
-		res = cat_scan(argv[n], "/", "",
+		res = cat_scan(argv[n], new_pathname("/", ""), add_stack(stack,
 			SQUASHFS_INODE_BLK(sBlk.s.root_inode),
 			SQUASHFS_INODE_OFFSET(sBlk.s.root_inode),
-			1, stack);
+			"", SQUASHFS_DIR_TYPE, 1));
 
 		if(res == FALSE)
 			failed = TRUE;
