@@ -1799,9 +1799,10 @@ static struct directory_stack *clone_stack(struct directory_stack *stack)
 }
 
 
-static void pop_stack(struct directory_stack *stack)
+static struct directory_stack *pop_stack(struct directory_stack *stack)
 {
 	free(stack->stack[--stack->size].name);
+	return stack;
 }
 
 
@@ -1910,13 +1911,6 @@ static char *stack_path(struct directory_stack *stack)
 }
 
 
-static struct directory_stack *set_stack(struct directory_stack *stack, int depth)
-{
-	stack->size = depth;
-	return stack;
-}
-
-
 static void add_symlink(struct directory_stack *stack, char *name)
 {
 	struct symlink *symlink = MALLOC(sizeof(struct symlink));
@@ -1952,7 +1946,7 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 
 	if(strcmp(target, "..") == 0) {
 		if(depth > 1)
-			traversed = follow_symlink(path, symlinks, set_stack(stack, depth - 1));
+			traversed = follow_symlink(path, symlinks, pop_stack(stack));
 
 		free(target);
 		return traversed;
@@ -2114,7 +2108,7 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 
 	if(strcmp(target, "..") == 0) {
 		if(depth > 1)
-			traversed = follow_path(path, symlinks, set_stack(stack, depth - 1));
+			traversed = follow_path(path, symlinks, pop_stack(stack));
 
 		free(target);
 		return traversed;
@@ -3418,7 +3412,7 @@ static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
 		if(depth > 1) {
 			free(target);
 			new = clone_stack(stack);
-			res = cat_scan(path, new_pathname(newpath, ".."), set_stack(new, depth - 1));
+			res = cat_scan(path, new_pathname(newpath, ".."), pop_stack(new));
 			free_stack(new);
 			return res;
 		} else {
