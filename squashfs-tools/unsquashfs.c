@@ -1926,7 +1926,6 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
-	int depth = stack_depth(stack);
 	struct inode *i;
 	struct dir *dir;
 	char *target, *symlink;
@@ -1945,7 +1944,7 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 		return TRUE;
 
 	if(strcmp(target, "..") == 0) {
-		if(depth > 1)
+		if(stack_depth(stack) > 1)
 			traversed = follow_symlink(path, symlinks, pop_stack(stack));
 
 		free(target);
@@ -2088,7 +2087,6 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
-	int depth = stack_depth(stack);
 	struct inode *i;
 	struct dir *dir;
 	char *target, *symlink;
@@ -2107,7 +2105,7 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 		return TRUE;
 
 	if(strcmp(target, "..") == 0) {
-		if(depth > 1)
+		if(stack_depth(stack) > 1)
 			traversed = follow_path(path, symlinks, pop_stack(stack));
 
 		free(target);
@@ -3383,7 +3381,6 @@ static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
 	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
-	int depth = stack_depth(stack);
 	struct inode *i;
 	struct dir *dir;
 	char *target, *addpath, *symlink;
@@ -3409,7 +3406,7 @@ static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
 	}
 
 	if(strcmp(target, "..") == 0) {
-		if(depth > 1) {
+		if(stack_depth(stack) > 1) {
 			free(target);
 			new = clone_stack(stack);
 			res = cat_scan(path, new_pathname(newpath, ".."), pop_stack(new));
