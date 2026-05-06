@@ -235,15 +235,15 @@ struct directory_level {
 	char		*name;
 };
 
-struct symlink {
-	char		*pathname;
-	struct symlink	*next;
+struct directory_path {
+	char			*pathname;
+	struct directory_path	*next;
 };
 
 struct directory_stack {
 	int			size;
 	struct directory_level 	*stack;
-	struct symlink		*symlink;
+	struct directory_path	*path;
 };
 
 #define MAX_FOLLOW_SYMLINKS 256

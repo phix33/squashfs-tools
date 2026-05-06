@@ -1754,7 +1754,7 @@ static struct directory_stack *create_stack()
 
 	stack->size = 0;
 	stack->stack = NULL;
-	stack->symlink = NULL;
+	stack->path = NULL;
 
 	return stack;
 }
@@ -1793,7 +1793,7 @@ static struct directory_stack *clone_stack(struct directory_stack *stack)
 	}
 
 	new->size = stack->size;
-	new->symlink = NULL;
+	new->path = NULL;
 
 	return new;
 }
@@ -1809,15 +1809,15 @@ static struct directory_stack *pop_stack(struct directory_stack *stack)
 static void free_stack(struct directory_stack *stack)
 {
 	int i;
-	struct symlink *symlink = stack->symlink;
+	struct directory_path *path = stack->path;
 
 	for(i = 0; i < stack->size; i++)
 		free(stack->stack[i].name);
 
-	while(symlink) {
-		struct symlink *s = symlink;
+	while(path) {
+		struct directory_path *s = path;
 
-		symlink = symlink->next;
+		path = path->next;
 		free(s->pathname);
 		free(s);
 	}
@@ -1913,11 +1913,11 @@ static char *stack_path(struct directory_stack *stack)
 
 static void add_symlink(struct directory_stack *stack, char *name)
 {
-	struct symlink *symlink = MALLOC(sizeof(struct symlink));
+	struct directory_path *path = MALLOC(sizeof(struct directory_path));
 
-	symlink->pathname = stack_pathname(stack, name);
-	symlink->next = stack->symlink;
-	stack->symlink = symlink;
+	path->pathname = stack_pathname(stack, name);
+	path->next = stack->path;
+	stack->path = path;
 }
 
 
@@ -2042,27 +2042,27 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 
 static void add_to_extracts(struct directory_stack *stack, char *name)
 {
-	struct symlink *symlink;
+	struct directory_path *path;
 	char *pathname = stack_pathname(stack, name);
 
 	add_extract(pathname);
 	free(pathname);
 
-	for(symlink = stack->symlink; symlink; symlink = symlink->next)
-			add_extract(symlink->pathname);
+	for(path = stack->path; path; path = path->next)
+		add_extract(path->pathname);
 }
 
 
 static void add_to_stack_extracts(struct directory_stack *stack)
 {
-	struct symlink *symlink;
+	struct directory_path *path;
 	char *pathname = stack_path(stack);
 
 	add_extract(pathname);
 	free(pathname);
 
-	for(symlink = stack->symlink; symlink; symlink = symlink->next)
-			add_extract(symlink->pathname);
+	for(path = stack->path; path; path = path->next)
+		add_extract(path->pathname);
 }
 
 
