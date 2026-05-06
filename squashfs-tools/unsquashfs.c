@@ -1921,6 +1921,16 @@ static void add_symlink(struct directory_stack *stack, char *name)
 }
 
 
+static void add_stack_path(struct directory_stack *stack)
+{
+	struct directory_path *path = MALLOC(sizeof(struct directory_path));
+
+	path->pathname = stack_pathname(stack, ".");
+	path->next = stack->path;
+	stack->path = path;
+}
+
+
 static int follow_symlink(char *path, int symlinks, struct directory_stack *stack)
 {
 	char *name;
@@ -1944,8 +1954,10 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 		return TRUE;
 
 	if(strcmp(target, "..") == 0) {
-		if(stack_depth(stack) > 1)
+		if(stack_depth(stack) > 1) {
+			add_stack_path(stack);
 			traversed = follow_symlink(path, symlinks, pop_stack(stack));
+		}
 
 		free(target);
 		return traversed;
@@ -2105,8 +2117,10 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 		return TRUE;
 
 	if(strcmp(target, "..") == 0) {
-		if(stack_depth(stack) > 1)
+		if(stack_depth(stack) > 1) {
+			add_stack_path(stack);
 			traversed = follow_path(path, symlinks, pop_stack(stack));
+		}
 
 		free(target);
 		return traversed;
