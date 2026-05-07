@@ -1911,7 +1911,7 @@ static char *stack_path(struct directory_stack *stack)
 }
 
 
-static void add_symlink(struct directory_stack *stack, char *name)
+static void add_stack_symlink(struct directory_stack *stack, char *name)
 {
 	struct directory_path *path = MALLOC(sizeof(struct directory_path));
 
@@ -1997,7 +1997,7 @@ static int follow_symlink(char *path, int symlinks, struct directory_stack *stac
 
 				/* Add symlink to list of symlinks found
 				 * traversing the pathname */
-				add_symlink(stack, name);
+				add_stack_symlink(stack, name);
 
 				traversed = follow_symlink(symlink, symlinks + 1, stack);
 
@@ -2160,7 +2160,7 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 
 				/* Add symlink to list of symlinks found
 				 * traversing the pathname */
-				add_symlink(stack, name);
+				add_stack_symlink(stack, name);
 
 				traversed = follow_symlink(symlink, symlinks + 1, stack);
 
