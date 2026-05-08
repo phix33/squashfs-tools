@@ -209,6 +209,7 @@ struct squashfs_file {
 struct path_entry {
 	char		*name;
 	int		type;
+	int		match_type;
 	regex_t		*preg;
 	struct pathname	*paths;
 };
@@ -227,6 +228,10 @@ struct pathnames {
 #define PATH_TYPE_LINK 1
 #define PATH_TYPE_EXTRACT 2
 #define PATH_TYPE_EXCLUDE 4
+
+#define MATCH_EXACT	1
+#define MATCH_WILDCARD	2
+#define MATCH_REGEX	3
 
 struct directory_level {
 	unsigned int	start_block;

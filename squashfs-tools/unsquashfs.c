@@ -1449,7 +1449,7 @@ static void free_path(struct pathname *paths)
 
 
 static struct pathname *add_path(struct pathname *paths, int type, char *target,
-							char *alltarget)
+						char *alltarget, int match_type)
 {
 	char *targname;
 	int i, error;
@@ -1475,7 +1475,8 @@ static struct pathname *add_path(struct pathname *paths, int type, char *target,
 	}
 
 	for(i = 0; i < paths->names; i++)
-		if(strcmp(paths->name[i].name, targname) == 0)
+		if(strcmp(paths->name[i].name, targname) == 0 &&
+				match_type == paths->name[i].match_type)
 			break;
 
 	if(i == paths->names) {
@@ -1487,8 +1488,9 @@ static struct pathname *add_path(struct pathname *paths, int type, char *target,
 			sizeof(struct path_entry));
 
 		paths->name[i].name = targname;
+		paths->name[i].match_type = match_type;
 		paths->name[i].paths = NULL;
-		if(use_regex) {
+		if(match_type == MATCH_REGEX) {
 			paths->name[i].preg = MALLOC(sizeof(regex_t));
 			error = regcomp(paths->name[i].preg, targname,
 				REG_EXTENDED|REG_NOSUB);
@@ -1520,7 +1522,7 @@ static struct pathname *add_path(struct pathname *paths, int type, char *target,
 			 */
 			paths->name[i].type = PATH_TYPE_LINK;
 			paths->name[i].paths = add_path(NULL, type, target,
-								alltarget);
+							alltarget, match_type);
 		}
 	} else {
 		/*
@@ -1550,7 +1552,7 @@ static struct pathname *add_path(struct pathname *paths, int type, char *target,
 			/*
 			 * recurse adding child components
 			 */
-			add_path(paths->name[i].paths, type, target, alltarget);
+			add_path(paths->name[i].paths, type, target, alltarget, match_type);
 	}
 
 	return paths;
@@ -1559,16 +1561,34 @@ static struct pathname *add_path(struct pathname *paths, int type, char *target,
 
 static void add_extract(char *target)
 {
-	extract = add_path(extract, PATH_TYPE_EXTRACT, target, target);
+	int type;
+
+	if(no_wildcards)
+		type = MATCH_EXACT;
+	else if(use_regex)
+		type = MATCH_REGEX;
+	else
+		type = MATCH_WILDCARD;
+
+	extract = add_path(extract, PATH_TYPE_EXTRACT, target, target, type);
 }
 
 
 static void add_exclude(char *str)
 {
-	if(strncmp(str, "... ", 4) == 0)
-		stickypath = add_path(stickypath, PATH_TYPE_EXCLUDE, str + 4, str + 4);
+	int type;
+
+	if(no_wildcards)
+		type = MATCH_EXACT;
+	else if(use_regex)
+		type = MATCH_REGEX;
 	else
-		exclude = add_path(exclude, PATH_TYPE_EXCLUDE, str, str);
+		type = MATCH_WILDCARD;
+
+	if(strncmp(str, "... ", 4) == 0)
+		stickypath = add_path(stickypath, PATH_TYPE_EXCLUDE, str + 4, str + 4, type);
+	else
+		exclude = add_path(exclude, PATH_TYPE_EXCLUDE, str, str, type);
 }
 
 
@@ -1616,9 +1636,9 @@ static int extract_matches(struct pathnames *paths, char *name, struct pathnames
 		for(i = 0; i < path->names; i++) {
 			int match;
 
-			if(no_wildcards)
+			if(path->name[i].match_type == MATCH_EXACT)
 				match = strcmp(path->name[i].name, name) == 0;
-			else if(use_regex)
+			else if(path->name[i].match_type == MATCH_REGEX)
 				match = regexec(path->name[i].preg, name,
 					(size_t) 0, NULL, 0) == 0;
 			else
@@ -1675,9 +1695,9 @@ static int exclude_match(struct pathname *path, char *name, struct pathnames **n
 	int i, match;
 
 	for(i = 0; i < path->names; i++) {
-		if(no_wildcards)
+		if(path->name[i].match_type == MATCH_EXACT)
 			match = strcmp(path->name[i].name, name) == 0;
-		else if(use_regex)
+		else if(path->name[i].match_type == MATCH_REGEX)
 			match = regexec(path->name[i].preg, name,
 				(size_t) 0, NULL, 0) == 0;
 		else
