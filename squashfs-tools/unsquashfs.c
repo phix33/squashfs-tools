@@ -1574,6 +1574,12 @@ static void add_extract(char *target)
 }
 
 
+static void add_extract_exact(char *target)
+{
+	extract = add_path(extract, PATH_TYPE_EXTRACT, target, target, MATCH_EXACT);
+}
+
+
 static void add_exclude(char *str)
 {
 	int type;
@@ -2081,7 +2087,7 @@ static void add_to_extracts(struct directory_stack *stack, char *name)
 	free(pathname);
 
 	for(path = stack->path; path; path = path->next)
-		add_extract(path->pathname);
+		add_extract_exact(path->pathname);
 }
 
 
@@ -2094,7 +2100,7 @@ static void add_to_stack_extracts(struct directory_stack *stack)
 	free(pathname);
 
 	for(path = stack->path; path; path = path->next)
-		add_extract(path->pathname);
+		add_extract_exact(path->pathname);
 }
 
 
