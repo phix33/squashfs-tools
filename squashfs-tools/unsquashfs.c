@@ -1808,6 +1808,7 @@ static struct directory_stack *clone_stack(struct directory_stack *stack)
 {
 	int i;
 	struct directory_stack *new = MALLOC(sizeof(struct directory_stack));
+	struct directory_path *src;
 
 	new->stack = MALLOC(stack->size * sizeof(struct directory_level));
 
@@ -1820,6 +1821,16 @@ static struct directory_stack *clone_stack(struct directory_stack *stack)
 
 	new->size = stack->size;
 	new->path = NULL;
+
+	if(stack->path) {
+		for(src = stack->path; src; src = src->next) {
+			struct directory_path *entry = MALLOC(sizeof(struct directory_path));
+
+			entry->pathname = STRDUP(src->pathname);
+			entry->next = new->path;
+			new->path = entry;
+		}
+	}
 
 	return new;
 }
