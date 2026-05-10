@@ -2115,6 +2115,40 @@ static void add_to_stack_extracts(struct directory_stack *stack)
 }
 
 
+static char *new_pathname(char *path, char *name)
+{
+	char *newpath;
+
+	if(strcmp(path, "/") == 0) {
+		newpath = MALLOC(strlen(name) + 2);
+		strcpy(newpath, "/");
+		strcat(newpath, name);
+	} else {
+		newpath = MALLOC(strlen(path) + strlen(name) + 2);
+		strcpy(newpath, path);
+		strcat(newpath, "/");
+		strcat(newpath, name);
+	}
+
+	return newpath;
+}
+
+
+static char *add_pathname(char *path, char *name)
+{
+	if(strcmp(path, "/") == 0) {
+		path = REALLOC(path, strlen(name) + 2);
+		strcat(path, name);
+	} else {
+		path = REALLOC(path, strlen(path) + strlen(name) + 2);
+		strcat(path, "/");
+		strcat(path, name);
+	}
+
+	return path;
+}
+
+
 /*
  * Walk the supplied pathname.   If any symlinks are encountered whilst walking
  * the pathname, then recursively walk those, to obtain the fully
@@ -2131,22 +2165,27 @@ static void add_to_stack_extracts(struct directory_stack *stack)
  * or a symlink is encountered which cannot be recursively walked due to
  * the above failures, then return FALSE.
  */
-static int follow_path(char *path, int symlinks, struct directory_stack *stack)
+static int follow_path(char *path, char *newpath, int symlinks,
+		struct directory_stack *stack)
 {
 	char *name;
 	unsigned int start_block = stack_start_block(stack);
 	unsigned int offset = stack_offset(stack);
 	struct inode *i;
 	struct dir *dir;
-	char *target, *symlink;
+	char *target, *symlink, *addpath;
 	unsigned int type;
-	int traversed = FALSE;
+	int matched = FALSE, traversed = TRUE;
+	int match, res;
 	unsigned int entry_start, entry_offset;
+	regex_t preg;
+	struct directory_stack *new;
 
 	while((path = get_component(path, &target))) {
 		if(strcmp(target, ".") != 0)
 			break;
 
+		newpath = add_pathname(newpath, ".");
 		free(target);
 	}
 
@@ -2155,8 +2194,10 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 
 	if(strcmp(target, "..") == 0) {
 		if(stack_depth(stack) > 1) {
-			add_stack_path(stack);
-			traversed = follow_path(path, symlinks, pop_stack(stack));
+			new = clone_stack(stack);
+			add_stack_path(new);
+			traversed = follow_path(path, new_pathname(newpath, ".."), symlinks, pop_stack(new));
+			free_stack(new);
 		}
 
 		free(target);
@@ -2165,12 +2206,35 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 
 	dir = s_ops->opendir(start_block, offset, &i);
 	if(dir == NULL) {
+		free(newpath);
 		free(target);
 		return FALSE;
 	}
 
+	if(use_regex) {
+		res = regcomp(&preg, target, REG_EXTENDED|REG_NOSUB);
+		if(res) {
+			char str[1024]; /* overflow safe */
+
+			regerror(res, &preg, str, 1024);
+			ERROR("follow_path: invalid regex %s because %s\n", target, str);
+			free(target);
+			squashfs_closedir(dir);
+			return FALSE;
+		}
+	}
+
 	while(squashfs_readdir(dir, &name, &entry_start, &entry_offset, &type)) {
-		if(strcmp(name, target) == 0) {
+		if(no_wildcards)
+			match = strcmp(name, target) == 0;
+		else if(use_regex)
+			match = regexec(&preg, name, (size_t) 0, NULL, 0) == 0;
+		else
+			match = fnmatch(target, name, FNM_PATHNAME|FNM_PERIOD|FNM_EXTMATCH) == 0;
+
+		if(match) {
+			matched = TRUE;
+
 			switch(type) {
 			case SQUASHFS_SYMLINK_TYPE:
 				i = s_ops->read_inode(entry_start, entry_offset);
@@ -2181,6 +2245,9 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 				 * we can't follow it, as it is probably
 				 * outside the Squashfs filesystem */
 				if(symlink[0] == '/') {
+					addpath = new_pathname(newpath, name);
+					ERROR("follow_path: %s failed to resolve symbolic link\n", addpath);
+					free(addpath);
 					traversed = FALSE;
 					free(symlink);
 					break;
@@ -2188,42 +2255,60 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 
 				/* Detect circular symlinks */
 				if(symlinks >= MAX_FOLLOW_SYMLINKS) {
-					ERROR("Too many levels of symbolic "
-								"links\n");
+					addpath = new_pathname(newpath, name);
+					ERROR("follow_path: %s too many levels of symbolic links\n", addpath);
+					free(addpath);
 					traversed = FALSE;
 					free(symlink);
 					break;
 				}
 
+				new = clone_stack(stack);
+
 				/* Add symlink to list of symlinks found
 				 * traversing the pathname */
-				add_stack_symlink(stack, name);
+				add_stack_symlink(new, name);
 
-				traversed = follow_symlink(symlink, symlinks + 1, stack);
+				res = follow_symlink(symlink, symlinks + 1, new);
 
 				free(symlink);
 
-				if(traversed == TRUE) {
-					/* If we still have some path to
-					 * walk, then walk it from where
-					 * the symlink traversal left us
-					 *
-					 * Obviously symlink traversal must
-					 * have left us at a directory to do
-					 * this */
-					if(path[0] != '\0') {
-						if(stack_type(stack) !=
-								SQUASHFS_DIR_TYPE) {
-							traversed = FALSE;
-							break;
-						}
+				if(res == FALSE) {
+					addpath = new_pathname(newpath, name);
+					ERROR("follow_path: %s failed to resolve symbolic link\n", addpath);
+					free(addpath);
+					free_stack(new);
+					traversed = FALSE;
+					continue;
+				}
 
-						/* continue following path */
-						traversed = follow_path(path, symlinks, stack);
-					} else {
-						add_to_stack_extracts(stack);
-						traversed = TRUE;
+				/* If we still have some path to
+				 * walk, then walk it from where
+				 * the symlink traversal left us
+				 *
+				 * Obviously symlink traversal must
+				 * have left us at a directory to do
+				 * this */
+				if(path[0] != '\0') {
+					if(stack_type(new) != SQUASHFS_DIR_TYPE) {
+						addpath = new_pathname(newpath, name);
+						ERROR("follow_path: %s symbolic link does not resolve to a directory\n", addpath);
+						free(addpath);
+						free_stack(new);
+						traversed = FALSE;
+						continue;
 					}
+
+					/* continue following path */
+					res = follow_path(path, new_pathname(newpath, name), symlinks, new);
+					if(res == FALSE)
+						traversed = FALSE;
+					free_stack(new);
+					continue;
+				} else {
+					add_to_stack_extracts(new);
+					free_stack(new);
+					traversed = TRUE;
 				}
 
 				break;
@@ -2232,9 +2317,13 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 				if(path[0] == '\0') {
 					add_to_extracts(stack, name);
 					traversed = TRUE;
-				} else /* follow the path */
-					traversed = follow_path(path, symlinks,
+				} else { /* follow the path */
+					res = follow_path(path, new_pathname(newpath, name), symlinks,
 						push_stack(stack, entry_start, entry_offset, name, type));
+					if(res == FALSE)
+						traversed = FALSE;
+					pop_stack(stack);
+				}
 				break;
 			default:
 				/* leaf directory entry, can't go any further,
@@ -2242,10 +2331,20 @@ static int follow_path(char *path, int symlinks, struct directory_stack *stack)
 				if(path[0] == '\0') {
 					add_to_extracts(stack, name);
 					traversed = TRUE;
-				} else
+				} else {
+					addpath = new_pathname(newpath, name);
+					ERROR("follow_path: %s is not a directory\n", addpath);
+					free(addpath);
 					traversed = FALSE;
+				}
 			}
 		}
+	}
+
+	if(matched == FALSE) {
+		newpath = add_pathname(newpath, target);
+		ERROR("follow_path: no matches for %s\n", newpath);
+		traversed = FALSE;
 	}
 
 	free(target);
@@ -3369,18 +3468,14 @@ static void resolve_symlinks(int argc, char *argv[])
 		 */
 		stack = create_stack();
 
-		found = follow_path(argv[n], 0, push_stack(stack,
+		found = follow_path(argv[n], new_pathname("/", ""), 0, push_stack(stack,
 			SQUASHFS_INODE_BLK(sBlk.s.root_inode),
 			SQUASHFS_INODE_OFFSET(sBlk.s.root_inode),
 			"", SQUASHFS_DIR_TYPE));
 
 		if(!found) {
 			if(missing_symlinks)
-				EXIT_UNSQUASH("Extract filename %s can't be "
-							"resolved\n", argv[n]);
-			else
-				ERROR("Extract filename %s can't be resolved\n",
-								argv[n]);
+				EXIT_UNSQUASH("Some matches in filename %s could not be resolved or followed\n", argv[n]);
 
 			add_extract(argv[n]);
 			free_stack(stack);
@@ -3390,41 +3485,6 @@ static void resolve_symlinks(int argc, char *argv[])
 		free_stack(stack);
 	}
 }
-
-
-static char *new_pathname(char *path, char *name)
-{
-	char *newpath;
-
-	if(strcmp(path, "/") == 0) {
-		newpath = MALLOC(strlen(name) + 2);
-		strcpy(newpath, "/");
-		strcat(newpath, name);
-	} else {
-		newpath = MALLOC(strlen(path) + strlen(name) + 2);
-		strcpy(newpath, path);
-		strcat(newpath, "/");
-		strcat(newpath, name);
-	}
-
-	return newpath;
-}
-
-
-static char *add_pathname(char *path, char *name)
-{
-	if(strcmp(path, "/") == 0) {
-		path = REALLOC(path, strlen(name) + 2);
-		strcat(path, name);
-	} else {
-		path = REALLOC(path, strlen(path) + strlen(name) + 2);
-		strcat(path, "/");
-		strcat(path, name);
-	}
-
-	return path;
-}
-
 
 
 static int cat_scan(char *path, char *newpath, struct directory_stack *stack)
@@ -4338,7 +4398,6 @@ static int parse_options(int argc, char *argv[])
 				strcmp(argv[i], "-follow") == 0 ||
 				strcmp(argv[i], "-L") == 0) {
 			follow_symlinks = TRUE;
-			no_wildcards = TRUE;
 		} else if(strcmp(argv[i], "missing-symlinks") == 0 ||
 				strcmp(argv[i], "-missing") == 0 ||
 				strcmp(argv[i], "-match") == 0)
