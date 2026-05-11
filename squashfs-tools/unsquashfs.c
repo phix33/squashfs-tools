@@ -3477,7 +3477,7 @@ static void resolve_symlinks(int argc, char *argv[])
 			if(missing_symlinks)
 				EXIT_UNSQUASH("Some matches in filename %s could not be resolved or followed\n", argv[n]);
 
-			add_extract(argv[n]);
+			add_extract_exact(".");
 			free_stack(stack);
 			continue;
 		}
