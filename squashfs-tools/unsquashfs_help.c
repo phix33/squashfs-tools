@@ -129,11 +129,9 @@ static char *unsquashfs_text[]={
 	"\t-exclude-file <file>\tlist of directories or files to exclude.  One "
 		"per line\n",
 	"\t-match\t\t\tabort if any extract file does not match on anything, "
-		"and can not be resolved.  Implies -missing-symlinks and "
-		"-no-wildcards\n",
+		"and can not be resolved.  Implies -missing-symlinks\n",
 	"\t-follow[-symlinks]\tfollow symlinks in extract files, and add all "
-		"files/symlinks needed to resolve extract file.  Implies "
-		"-no-wildcards\n",
+		"files/symlinks needed to resolve extract file\n",
 	"\t-missing[-symlinks]\tUnsquashfs will abort if any symlink can't be "
 		"resolved in -follow-symlinks\n",
 	"\t-no-wild[cards]\t\tdo not use wildcard matching in extract and "
